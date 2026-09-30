@@ -23,8 +23,10 @@
       <circle cx="412" cy="397" r="97"/>
       <line x1="115" y1="130" x2="397" y2="382" stroke="#000" stroke-width="80"/>
     </g>
-    <polygon points="330,10 410,10 490,90 490,160 410,230 370,230 290,150 290,50"/>
-    <polygon points="272,188 300,158 362,216 332,246"/>
-    <polygon points="55,405 170,290 232,348 117,465"/>
+    <g transform="translate(388 124) rotate(45)">
+      <polygon points="-78,-55 78,-55 103,-30 103,30 78,55 -78,55 -103,30 -103,-30"/>
+      <rect x="-26" y="50" width="52" height="78"/>
+      <rect x="-26" y="256" width="52" height="138"/>
+    </g>
   </g>
 </svg>
