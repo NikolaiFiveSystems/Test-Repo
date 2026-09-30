@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800">
+  <title>Wrench and hammer inside circular arrows</title>
+  <defs>
+    <mask id="cut" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+      <rect width="512" height="512" fill="#fff"/>
+      <polygon fill="#000" points="85,-10 135,85 112,135 58,140 5,75 -10,-10"/>
+      <polygon fill="#000" transform="rotate(180 256 256)" points="85,-10 135,85 112,135 58,140 5,75 -10,-10"/>
+    </mask>
+  </defs>
+  <g fill="#000" stroke="none">
+    <g fill="none" stroke="#000" stroke-width="30">
+    <path d="M689.8 322.4 A300 300 0 0 0 347.9 104.6"/>
+    <path class="h" fill="#000" stroke="none" d="M46 0L-26 -38L-8 0L-26 38Z" transform="translate(347.9 104.6) rotate(-190)"/>
+    <path d="M322.4 689.8 A300 300 0 0 0 681.9 502.6"/>
+    <path class="h" fill="#000" stroke="none" d="M46 0L-26 -38L-8 0L-26 38Z" transform="translate(681.9 502.6) rotate(-70)"/>
+    <path d="M187.9 187.9 A300 300 0 0 0 170.2 592.8"/>
+    <path class="h" fill="#000" stroke="none" d="M46 0L-26 -38L-8 0L-26 38Z" transform="translate(170.2 592.8) rotate(50)"/>
+    </g>
+  </g>
+  <g transform="translate(221 221) scale(0.7)" fill="#000">
+    <g mask="url(#cut)">
+      <circle cx="100" cy="115" r="97"/>
+      <circle cx="412" cy="397" r="97"/>
+      <line x1="115" y1="130" x2="397" y2="382" stroke="#000" stroke-width="80"/>
+    </g>
+    <polygon points="330,10 410,10 490,90 490,160 410,230 370,230 290,150 290,50"/>
+    <polygon points="272,188 300,158 362,216 332,246"/>
+    <polygon points="55,405 170,290 232,348 117,465"/>
+  </g>
+</svg>
