@@ -1,60 +1,108 @@
 #Requires AutoHotkey v2.0
 
-; HTTP-запрос через WinHTTP. Тело отправляется и читается как UTF-8.
+; HTTP-запрос через WinHTTP API. Тело отправляется и читается как UTF-8.
 ; headers — Map("Имя", "значение"). Возвращает {status, body}.
 ; ignoreCertErrors — не проверять сертификат сервера (аналог verify=False).
+; Клиентский сертификат не отправляется никогда: иначе Windows может сама подставить
+; сертификат из личного хранилища (ЭЦП, банковский), и сервер ответит ошибкой 495.
 HttpPost(url, body, headers, proxy := "", ignoreCertErrors := false) {
-    req := ComObject("WinHttp.WinHttpRequest.5.1")
-    req.Open("POST", url, false)
-    ; DNS, соединение, отправка, ожидание ответа (мс)
-    req.SetTimeouts(15000, 15000, 30000, 120000)
-    if proxy != ""
-        req.SetProxy(2, proxy, "<local>")
-    if ignoreCertErrors
-        try req.Option[4] := 0x3300  ; SslErrorIgnoreFlags: неизвестный УЦ, имя, срок, назначение
-    for name, value in headers
-        req.SetRequestHeader(name, value)
+    ; Держим winhttp.dll загруженной: иначе DllCall выгружает её после каждого вызова
+    ; и дескрипторы сессии становятся недействительными.
+    static winhttp := DllCall("LoadLibrary", "Str", "winhttp.dll", "Ptr")
+    if !RegExMatch(url, "i)^(https?)://([^/:]+)(?::(\d+))?(/.*)?$", &u)
+        throw ValueError("Неверный адрес: " url)
+    secure := u[1] = "https"
+    host := u[2]
+    port := u[3] != "" ? Integer(u[3]) : secure ? 443 : 80
+    path := u[4] != "" ? u[4] : "/"
+
+    hSession := hConnect := hRequest := 0
     try {
-        req.Send(Utf8Bytes(body))
-    } catch as e {
-        host := RegExReplace(url, "^\w+://([^/]+).*$", "$1")
-        msg := "Не удалось связаться с " host "."
-        if InStr(e.Message, "80072F8F") || InStr(e.Message, "80072F0D") || InStr(e.Message, "80072F06") || InStr(e.Message, "80072F7D")
+        if proxy != ""
+            hSession := DllCall("winhttp\WinHttpOpen", "Str", "TextHelper", "UInt", 3, "Str", proxy, "Str", "<local>;localhost;127.0.0.1;[::1]", "UInt", 0, "Ptr")
+        else
+            hSession := DllCall("winhttp\WinHttpOpen", "Str", "TextHelper", "UInt", 0, "Ptr", 0, "Ptr", 0, "UInt", 0, "Ptr")
+        if !hSession
+            _WinHttpFail(host, A_LastError)
+        ; DNS, соединение, отправка, ожидание ответа (мс)
+        DllCall("winhttp\WinHttpSetTimeouts", "Ptr", hSession, "Int", 15000, "Int", 15000, "Int", 30000, "Int", 120000)
+        if !(hConnect := DllCall("winhttp\WinHttpConnect", "Ptr", hSession, "Str", host, "UShort", port, "UInt", 0, "Ptr"))
+            _WinHttpFail(host, A_LastError)
+        hRequest := DllCall("winhttp\WinHttpOpenRequest", "Ptr", hConnect, "Str", "POST", "Str", path,
+            "Ptr", 0, "Ptr", 0, "Ptr", 0, "UInt", secure ? 0x800000 : 0, "Ptr")  ; WINHTTP_FLAG_SECURE
+        if !hRequest
+            _WinHttpFail(host, A_LastError)
+        if secure && ignoreCertErrors  ; SECURITY_FLAGS: неизвестный УЦ, имя, срок, назначение
+            DllCall("winhttp\WinHttpSetOption", "Ptr", hRequest, "UInt", 31, "UInt*", 0x3300, "UInt", 4)
+        if secure  ; CLIENT_CERT_CONTEXT = WINHTTP_NO_CLIENT_CERT_CONTEXT
+            DllCall("winhttp\WinHttpSetOption", "Ptr", hRequest, "UInt", 47, "Ptr", 0, "UInt", 0)
+
+        headerText := ""
+        for name, value in headers
+            headerText .= name ": " value "`r`n"
+        if headerText != ""
+            DllCall("winhttp\WinHttpAddRequestHeaders", "Ptr", hRequest, "Str", headerText, "UInt", -1, "UInt", 0xA0000000)
+
+        size := StrPut(body, "UTF-8") - 1
+        data := Buffer(size + 1)
+        StrPut(body, data, "UTF-8")
+        loop 2 {
+            ok := DllCall("winhttp\WinHttpSendRequest", "Ptr", hRequest, "Ptr", 0, "UInt", 0,
+                "Ptr", data, "UInt", size, "UInt", size, "UPtr", 0)
+                && DllCall("winhttp\WinHttpReceiveResponse", "Ptr", hRequest, "Ptr", 0)
+            if ok
+                break
+            err := A_LastError
+            ; ERROR_WINHTTP_CLIENT_AUTH_CERT_NEEDED: повторяем без клиентского сертификата
+            if err != 12044 || A_Index = 2
+                _WinHttpFail(host, err)
+            DllCall("winhttp\WinHttpSetOption", "Ptr", hRequest, "UInt", 47, "Ptr", 0, "UInt", 0)
+        }
+
+        ; WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER
+        DllCall("winhttp\WinHttpQueryHeaders", "Ptr", hRequest, "UInt", 0x20000013, "Ptr", 0,
+            "UInt*", &status := 0, "UInt*", 4, "Ptr", 0)
+
+        response := Buffer(65536)
+        total := 0
+        loop {
+            if !DllCall("winhttp\WinHttpQueryDataAvailable", "Ptr", hRequest, "UInt*", &avail := 0)
+                _WinHttpFail(host, A_LastError)
+            if !avail
+                break
+            if total + avail > response.Size
+                response.Size := Max(response.Size * 2, total + avail)
+            if !DllCall("winhttp\WinHttpReadData", "Ptr", hRequest, "Ptr", response.Ptr + total, "UInt", avail, "UInt*", &read := 0)
+                _WinHttpFail(host, A_LastError)
+            if !read
+                break
+            total += read
+        }
+        return {status: status, body: total ? StrGet(response, total, "UTF-8") : ""}
+    } finally {
+        for handle in [hRequest, hConnect, hSession]
+            if handle
+                DllCall("winhttp\WinHttpCloseHandle", "Ptr", handle)
+    }
+}
+
+_WinHttpFail(host, code) {
+    msg := "Не удалось связаться с " host "."
+    switch code {
+        case 12175, 12045, 12038, 12037, 12157, 12057:
             msg .= "`nСервер использует сертификат, которому Windows не доверяет."
                 . "`nДля GigaChat: VerifySsl=0 в settings.ini или сертификат «Russian Trusted Root CA» (см. README)."
-        else if InStr(e.Message, "80072EE2")
+        case 12002:
             msg .= "`nПревышено время ожидания."
-        else if InStr(e.Message, "80072EFD") && RegExMatch(host, "i)^(localhost|127\.0\.0\.1)(:|$)")
-            msg .= "`nЛокальная модель не отвечает — запущена ли Ollama?"
-        throw Error(msg "`n`n" e.Message)
+        case 12007:
+            msg .= "`nСервер не найден — проверьте адрес и подключение к интернету."
+        case 12029:
+            if RegExMatch(host, "i)^(localhost|127\.0\.0\.1)$")
+                msg .= "`nЛокальная модель не отвечает — запущена ли Ollama?"
+            else
+                msg .= "`nСоединение не установлено — проверьте интернет или прокси."
     }
-    return {status: req.Status, body: Utf8FromBytes(req.ResponseBody)}
-}
-
-; Строка -> массив байтов UTF-8 (SAFEARRAY VT_UI1), как требует WinHttpRequest.Send.
-Utf8Bytes(str) {
-    size := StrPut(str, "UTF-8") - 1
-    buf := Buffer(size + 1)
-    StrPut(str, buf, "UTF-8")
-    arr := ComObjArray(0x11, size)
-    if size {
-        DllCall("OleAut32\SafeArrayAccessData", "Ptr", ComObjValue(arr), "Ptr*", &data := 0)
-        DllCall("RtlMoveMemory", "Ptr", data, "Ptr", buf, "UPtr", size)
-        DllCall("OleAut32\SafeArrayUnaccessData", "Ptr", ComObjValue(arr))
-    }
-    return arr
-}
-
-Utf8FromBytes(arr) {
-    if !(ComObjType(arr) & 0x2000)
-        return ""
-    size := arr.MaxIndex() + 1
-    if size <= 0
-        return ""
-    DllCall("OleAut32\SafeArrayAccessData", "Ptr", ComObjValue(arr), "Ptr*", &data := 0)
-    text := StrGet(data, size, "UTF-8")
-    DllCall("OleAut32\SafeArrayUnaccessData", "Ptr", ComObjValue(arr))
-    return text
+    throw Error(msg "`n`nКод ошибки WinHTTP: " code)
 }
 
 ; Кодирование для application/x-www-form-urlencoded (UTF-8).

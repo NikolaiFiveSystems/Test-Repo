@@ -69,7 +69,6 @@ Check("urlencode ascii", UrlEncode("a-b_c.d~e f&g=h"), "a-b_c.d~e%20f%26g%3Dh")
 Check("urlencode cyrillic", UrlEncode("Привет"), "%D0%9F%D1%80%D0%B8%D0%B2%D0%B5%D1%82")
 Check("urlencode newline", UrlEncode("a`nb"), "a%0Ab")
 Check("uuid format", RegExMatch(NewUuid(), "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"), 1)
-Check("utf8 bytes roundtrip", Utf8FromBytes(Utf8Bytes("Ёжик " Chr(0x1F600))), "Ёжик " Chr(0x1F600))
 
 ; --- LanguageTool ---------------------------------------------------------------
 
