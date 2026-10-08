@@ -28,8 +28,8 @@ Persistent()
 SetupTray()
 RegisterHotkey("Fix", "^!vk46", FixSelection)
 RegisterHotkey("Menu", "^!vk52", ShowActionsMenu)
-TrayTip(HotkeyLabel(Setting("Hotkeys", "Fix", "^!vk46")) " — исправить орфографию`n"
-    . HotkeyLabel(Setting("Hotkeys", "Menu", "^!vk52")) " — меню переформулировки",
+TrayTip(HotkeysLabel("Fix", "^!vk46") " — исправить орфографию`n"
+    . HotkeysLabel("Menu", "^!vk52") " — меню переформулировки",
     "TextHelper запущен", "Mute")
 
 ; ---------------------------------------------------------------------------
@@ -188,8 +188,8 @@ ShowPreview(sel, result, instruction, opts) {
 ; Копирует выделенный текст, не портя содержимое буфера обмена.
 ; Возвращает {text, hwnd} или "" если ничего не выделено.
 CaptureSelection() {
-    ; Ждём, пока пользователь отпустит Ctrl/Alt/Shift/Win после горячей клавиши.
-    for key in ["Ctrl", "Alt", "Shift", "LWin", "RWin"]
+    ; Ждём, пока пользователь отпустит клавиши и кнопки мыши горячего сочетания.
+    for key in ["Ctrl", "Alt", "Shift", "LWin", "RWin", "RButton", "MButton", "XButton1", "XButton2"]
         KeyWait(key, "T1")
     hwnd := WinExist("A")
     saved := ClipboardAll()
@@ -340,17 +340,40 @@ OpenInNotepad(path) {
 ; Горячие клавиши, трей, уведомления
 ; ---------------------------------------------------------------------------
 
-RegisterHotkey(name, default, callback) {
-    keys := Setting("Hotkeys", name, default)
-    if keys = ""
-        return
-    try Hotkey(keys, callback)
-    catch as e
-        ShowError("Не удалось назначить горячую клавишу " name "=" keys "`n`n" e.Message)
+; Сочетания для действия. Можно указать несколько строк с одним именем
+; (Menu=#F8 и Menu=^RButton); пустое значение отключает действие.
+HotkeyKeys(name, default) {
+    keys := []
+    found := false
+    if Cfg.Has("Hotkeys")
+        for pair in Cfg["Hotkeys"]
+            if pair[1] = name {
+                found := true
+                if pair[2] != ""
+                    keys.Push(pair[2])
+            }
+    return found ? keys : [default]
 }
 
-; "^!vk46" -> "Ctrl+Alt+F"
+RegisterHotkey(name, default, callback) {
+    for keys in HotkeyKeys(name, default) {
+        try Hotkey(keys, callback)
+        catch as e
+            ShowError("Не удалось назначить горячую клавишу " name "=" keys "`n`n" e.Message)
+    }
+}
+
+HotkeysLabel(name, default) {
+    out := ""
+    for keys in HotkeyKeys(name, default)
+        out .= (A_Index = 1 ? "" : " или ") HotkeyLabel(keys)
+    return out = "" ? "(не назначено)" : out
+}
+
+; "^!vk46" -> "Ctrl+Alt+F", "^RButton" -> "Ctrl+правая кнопка мыши"
 HotkeyLabel(keys) {
+    static mouse := Map("lbutton", "левая кнопка мыши", "rbutton", "правая кнопка мыши",
+        "mbutton", "колесо мыши", "xbutton1", "боковая кнопка мыши 1", "xbutton2", "боковая кнопка мыши 2")
     mods := ""
     while keys != "" && InStr("^!+#<>*~$", SubStr(keys, 1, 1)) {
         switch SubStr(keys, 1, 1) {
@@ -361,6 +384,8 @@ HotkeyLabel(keys) {
         }
         keys := SubStr(keys, 2)
     }
+    if mouse.Has(StrLower(keys))
+        return mods mouse[StrLower(keys)]
     if RegExMatch(keys, "i)^vk([0-9a-f]{2})$", &m) {
         vk := Integer("0x" m[1])
         keys := (vk >= 0x30 && vk <= 0x5A) ? Chr(vk) : GetKeyName(keys)
@@ -401,8 +426,8 @@ ToggleAutostart(itemName, *) {
 ShowHelp() {
     MsgBox("1. Выделите текст в любой программе.`n"
         . "2. Нажмите:`n"
-        . "    " HotkeyLabel(Setting("Hotkeys", "Fix", "^!vk46")) " — исправить орфографию (LanguageTool, бесплатно)`n"
-        . "    " HotkeyLabel(Setting("Hotkeys", "Menu", "^!vk52")) " — меню: исправить, переформулировать, вежливее, короче…`n"
+        . "    " HotkeysLabel("Fix", "^!vk46") " — исправить орфографию (LanguageTool, бесплатно)`n"
+        . "    " HotkeysLabel("Menu", "^!vk52") " — меню: исправить, переформулировать, вежливее, короче…`n"
         . "3. В меню можно нажать цифру пункта. В окне результата Enter — заменить, Esc — отмена.`n`n"
         . "Отменить замену — Ctrl+Z в той программе, где был текст.`n"
         . "Свои пункты меню и ключи ИИ — в settings.ini (трей → Настройки).`n"
