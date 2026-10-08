@@ -127,6 +127,13 @@ techMatches := JsonLoad('
 Check("lt keeps dictionary terms", ApplyLanguageToolMatches(techText, techMatches, "style", dict).text, "Рутокена нет, Эвотор привет.")
 Check("lt without dictionary", ApplyLanguageToolMatches(techText, techMatches, "style").text, "Рутина нет, Электор привет.")
 
+; Правки, удаляющие слово целиком, не применяются; знаки препинания — применяются.
+deletions := JsonLoad('{"matches":[{"replacements":[{"value":""}],"offset":0,"length":6,"rule":{"issueType":"misspelling"}},{"replacements":[{"value":""}],"offset":7,"length":3,"rule":{"issueType":"grammar"}},{"replacements":[{"value":","}],"offset":10,"length":1,"rule":{"issueType":"typographical"}},{"replacements":[{"value":" "}],"offset":11,"length":2,"rule":{"issueType":"whitespace"}}]}')["matches"]
+fixed := ApplyLanguageToolMatches("Превет как;  дела", deletions)
+Check("lt never deletes words", fixed.text, "Превет как, дела")
+Check("lt deletion changes", fixed.changes.Length, 2)
+Check("count letters", CountLetters("Привет, мир! 123 ok"), 11)
+
 ; --- Файлы контекста и словаря --------------------------------------------------
 
 tmp := A_Temp "\texthelper_test.txt"

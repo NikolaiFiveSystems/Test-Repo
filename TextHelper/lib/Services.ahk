@@ -4,7 +4,8 @@
 ; LanguageTool — бесплатная проверка орфографии и грамматики.
 ; ---------------------------------------------------------------------------
 
-; opts: url, language, preferredVariants, username, apiKey, proxy.
+; opts: url, language, preferredVariants, username, apiKey, proxy;
+; logPath (необязательно) — файл, куда записать текст и ответ сервера для разбора проблем.
 ; Возвращает массив замечаний (matches) из ответа LanguageTool.
 LanguageToolCheck(text, opts) {
     body := "text=" UrlEncode(text) "&language=" UrlEncode(opts.language)
@@ -15,6 +16,14 @@ LanguageToolCheck(text, opts) {
     headers := Map("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8",
         "Accept", "application/json")
     resp := HttpPost(opts.url, body, headers, opts.proxy)
+    if opts.HasOwnProp("logPath") && opts.logPath != "" {
+        try {
+            log := FileOpen(opts.logPath, "w", "UTF-8")
+            log.Write("=== " FormatTime(, "yyyy-MM-dd HH:mm:ss") " — текст ===`n" text
+                "`n`n=== ответ LanguageTool (HTTP " resp.status ") ===`n" resp.body "`n")
+            log.Close()
+        }
+    }
     if resp.status != 200 {
         if resp.status = 429
             throw Error("LanguageTool: слишком много запросов, подождите минуту.")
@@ -54,7 +63,11 @@ ApplyLanguageToolMatches(text, matches, skipIssueTypes := "style", dictionary :=
         if rule.Has("issueType") && rule["issueType"] = "misspelling"
             && IsProtectedWord(SubStr(text, start, len), dictionary)
             continue
-        edits.Push({start: start, len: len, new: m["replacements"][1]["value"]})
+        new := m["replacements"][1]["value"]
+        ; Слова целиком не удаляем: автоматически такая правка слишком опасна.
+        if RegExMatch(SubStr(text, start, len), "\p{L}") && !RegExMatch(new, "\p{L}")
+            continue
+        edits.Push({start: start, len: len, new: new})
     }
 
     ; Сортировка по позиции (вставками — замечаний немного).
@@ -84,6 +97,12 @@ ApplyLanguageToolMatches(text, matches, skipIssueTypes := "style", dictionary :=
         limit := e.start
     }
     return {text: text, changes: changes}
+}
+
+; Число букв в тексте — для проверки, что исправления не уничтожили текст.
+CountLetters(text) {
+    RegExReplace(text, "\p{L}", "", &count)
+    return count
 }
 
 ; Слова, которые проверка орфографии не должна «исправлять»: аббревиатуры (ККТ, ЕГАИС),

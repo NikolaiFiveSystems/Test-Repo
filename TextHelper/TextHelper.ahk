@@ -11,6 +11,7 @@
 SETTINGS_PATH := A_ScriptDir "\settings.ini"
 CONTEXT_PATH := A_ScriptDir "\context.txt"
 DICTIONARY_PATH := A_ScriptDir "\dictionary.txt"
+LT_LOG_PATH := A_Temp "\TextHelper-languagetool.txt"
 STARTUP_LINK := A_Startup "\TextHelper.lnk"
 
 DEFAULT_ACTIONS := [
@@ -56,7 +57,8 @@ FixText(sel, *) {
             preferredVariants: Setting("LanguageTool", "PreferredVariants", "en-US"),
             username: Setting("LanguageTool", "Username"),
             apiKey: Setting("LanguageTool", "ApiKey"),
-            proxy: Setting("General", "Proxy")
+            proxy: Setting("General", "Proxy"),
+            logPath: LT_LOG_PATH
         })
         result := ApplyLanguageToolMatches(sel.text, matches,
             Setting("LanguageTool", "SkipIssueTypes", "style"), ReadWordList(DICTIONARY_PATH))
@@ -71,7 +73,6 @@ FixText(sel, *) {
         Notify("Ошибок не найдено ✓")
         return
     }
-    PasteText(sel.hwnd, result.text)
     summary := ""
     for change in result.changes {
         if A_Index > 8 {
@@ -80,6 +81,15 @@ FixText(sel, *) {
         }
         summary .= "`n«" change[1] "» → «" change[2] "»"
     }
+    ; Предохранитель: если букв стало заметно меньше, текст не трогаем.
+    before := CountLetters(sel.text)
+    if before >= 5 && CountLetters(result.text) < before * 0.8 {
+        ShowError("LanguageTool предложил исправления, которые удаляют слишком много текста. "
+            . "Замена отменена, ваш текст не изменён.`n`nПредлагалось:" summary
+            . "`n`nТекст и ответ сервера сохранены в файл:`n" LT_LOG_PATH)
+        return
+    }
+    PasteText(sel.hwnd, result.text)
     Notify("Исправлено: " result.changes.Length summary, 5000)
 }
 
