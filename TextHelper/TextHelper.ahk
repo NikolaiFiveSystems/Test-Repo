@@ -9,6 +9,8 @@
 #Include %A_ScriptDir%\lib\Services.ahk
 
 SETTINGS_PATH := A_ScriptDir "\settings.ini"
+CONTEXT_PATH := A_ScriptDir "\context.txt"
+DICTIONARY_PATH := A_ScriptDir "\dictionary.txt"
 STARTUP_LINK := A_Startup "\TextHelper.lnk"
 
 DEFAULT_ACTIONS := [
@@ -57,7 +59,7 @@ FixText(sel, *) {
             proxy: Setting("General", "Proxy")
         })
         result := ApplyLanguageToolMatches(sel.text, matches,
-            Setting("LanguageTool", "SkipIssueTypes", "style"))
+            Setting("LanguageTool", "SkipIssueTypes", "style"), ReadWordList(DICTIONARY_PATH))
     } catch as e {
         Notify()
         ShowError(e.Message)
@@ -282,6 +284,8 @@ AiOptions() {
     opts := {
         provider: provider,
         proxy: Setting("General", "Proxy"),
+        context: ReadUserText(CONTEXT_PATH),
+        terms: ReadWordList(DICTIONARY_PATH),
         gigaKey: Setting("GigaChat", "AuthKey") || EnvGet("GIGACHAT_CREDENTIALS"),
         gigaScope: Setting("GigaChat", "Scope", "GIGACHAT_API_PERS"),
         gigaModel: Setting("GigaChat", "Model", "GigaChat-2"),
@@ -326,8 +330,10 @@ ProviderName(opts) {
     }
 }
 
-OpenSettings() {
-    Run('notepad.exe "' SETTINGS_PATH '"')
+OpenSettings() => OpenInNotepad(SETTINGS_PATH)
+
+OpenInNotepad(path) {
+    Run('notepad.exe "' path '"')
 }
 
 ; ---------------------------------------------------------------------------
@@ -368,6 +374,8 @@ SetupTray() {
     tray.Delete()
     tray.Add("Как пользоваться", (*) => ShowHelp())
     tray.Add("Настройки", (*) => OpenSettings())
+    tray.Add("Контекст для ИИ", (*) => OpenInNotepad(CONTEXT_PATH))
+    tray.Add("Словарь терминов", (*) => OpenInNotepad(DICTIONARY_PATH))
     tray.Add("Запускать вместе с Windows", ToggleAutostart)
     if FileExist(STARTUP_LINK)
         tray.Check("Запускать вместе с Windows")
@@ -397,7 +405,8 @@ ShowHelp() {
         . "    " HotkeyLabel(Setting("Hotkeys", "Menu", "^!vk52")) " — меню: исправить, переформулировать, вежливее, короче…`n"
         . "3. В меню можно нажать цифру пункта. В окне результата Enter — заменить, Esc — отмена.`n`n"
         . "Отменить замену — Ctrl+Z в той программе, где был текст.`n"
-        . "Свои пункты меню и ключи ИИ — в settings.ini (трей → Настройки).",
+        . "Свои пункты меню и ключи ИИ — в settings.ini (трей → Настройки).`n"
+        . "О чём вы пишете — в context.txt, термины, которые нельзя «исправлять», — в dictionary.txt.",
         "TextHelper — как пользоваться", "Iconi")
 }
 

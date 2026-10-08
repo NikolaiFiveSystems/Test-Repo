@@ -106,6 +106,50 @@ Check("lt mismatched offset skipped", fixed.text, text)
 unordered := JsonLoad('{"matches":[{"replacements":[{"value":"bb"}],"offset":4,"length":1},{"replacements":[{"value":"aa"}],"offset":0,"length":1}]}')
 Check("lt unordered", ApplyLanguageToolMatches("a b c d", unordered["matches"]).text, "aa b bb d")
 
+; --- Термины, которые проверка орфографии не трогает -------------------------------
+
+dict := ["Рутокен", "Эвотор", "Штрих-М", "фискализация", "ТСД"]
+for word in ["ККТ", "ЕГАИС", "USB", "1С", "54-ФЗ", "COM1", "ПолучитьДанные", "JaCarta",
+        "Рутокен", "рутокена", "Рутокеном", "Эвотора", "Штрих-М", "фискализации", "ТСД"]
+    Check("protected " word, IsProtectedWord(word, dict), true)
+for word in ["превет", "Рутакен", "Эвоторный_длинный", "Привет", "А", "Фискал"]
+    Check("not protected " word, IsProtectedWord(word, dict), false)
+
+techText := "Рутокена нет, Эвотор превет."
+techMatches := JsonLoad('
+(
+{"matches":[
+ {"replacements":[{"value":"Рутина"}],"offset":0,"length":8,"rule":{"issueType":"misspelling"}},
+ {"replacements":[{"value":"Электор"}],"offset":14,"length":6,"rule":{"issueType":"misspelling"}},
+ {"replacements":[{"value":"привет"}],"offset":21,"length":6,"rule":{"issueType":"misspelling"}}
+]}
+)')["matches"]
+Check("lt keeps dictionary terms", ApplyLanguageToolMatches(techText, techMatches, "style", dict).text, "Рутокена нет, Эвотор привет.")
+Check("lt without dictionary", ApplyLanguageToolMatches(techText, techMatches, "style").text, "Рутина нет, Электор привет.")
+
+; --- Файлы контекста и словаря --------------------------------------------------
+
+tmp := A_Temp "\texthelper_test.txt"
+try FileDelete(tmp)
+FileAppend("; комментарий`r`nЯ специалист по 1С.`r`n`r`n  `; ещё комментарий`r`nПишу клиентам.`r`n", tmp, "UTF-8")
+Check("read user text", ReadUserText(tmp), "Я специалист по 1С.`n`nПишу клиентам.")
+FileDelete(tmp)
+FileAppend("; термины`nАТОЛ, Штрих-М ,Эвотор`n`nРутокен`n", tmp, "UTF-8")
+words := ReadWordList(tmp)
+Check("word list", words.Length "|" words[1] "|" words[2] "|" words[3] "|" words[4], "4|АТОЛ|Штрих-М|Эвотор|Рутокен")
+FileDelete(tmp)
+Check("missing file", ReadUserText(tmp), "")
+Check("missing word list", ReadWordList(tmp).Length, 0)
+
+; --- Промпт с контекстом и терминами ------------------------------------------------
+
+prompt := AiSystemPrompt("Сократи.", "", "Я специалист по 1С.", ["ККТ", "Рутокен"])
+Check("prompt context", InStr(prompt, "<context>`nЯ специалист по 1С.`n</context>`n`nTask: Сократи.") > 0, true)
+Check("prompt terms", InStr(prompt, "Russian words may change their endings to fit the grammar: ККТ, Рутокен") > 0, true)
+plain := AiSystemPrompt("Сократи.")
+Check("prompt without context", InStr(plain, "<context>") || InStr(plain, "Keep these terms") || InStr(plain, "{"), 0)
+Check("prompt without context layout", InStr(plain, "transform it.`n`nTask: Сократи.") > 0, true)
+
 ; --- Claude ---------------------------------------------------------------------
 
 opts := {claudeModel: "claude-opus-5-5", claudeEffort: "low", claudeFallbacks: "default"}
