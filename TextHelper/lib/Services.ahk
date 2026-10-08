@@ -222,7 +222,7 @@ GigaChatToken(opts) {
         "Content-Type", "application/x-www-form-urlencoded",
         "Accept", "application/json"
     )
-    resp := HttpPost(opts.gigaAuthUrl, "scope=" UrlEncode(opts.gigaScope), headers, opts.proxy)
+    resp := HttpPost(opts.gigaAuthUrl, "scope=" UrlEncode(opts.gigaScope), headers, opts.proxy, !opts.gigaVerifySsl)
     try data := JsonLoad(resp.body)
     catch
         data := ""
@@ -243,7 +243,7 @@ GigaChatComplete(system, user, opts) {
         "Content-Type", "application/json",
         "Accept", "application/json"
     )
-    resp := HttpPost(opts.gigaChatUrl, ChatRequestBody(system, user, opts.gigaModel), headers, opts.proxy)
+    resp := HttpPost(opts.gigaChatUrl, ChatRequestBody(system, user, opts.gigaModel), headers, opts.proxy, !opts.gigaVerifySsl)
     return ChatParseResponse("GigaChat", resp.status, resp.body)
 }
 

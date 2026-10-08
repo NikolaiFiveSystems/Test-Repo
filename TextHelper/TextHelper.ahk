@@ -287,6 +287,7 @@ AiOptions() {
         gigaModel: Setting("GigaChat", "Model", "GigaChat-2"),
         gigaAuthUrl: Setting("GigaChat", "AuthUrl", GIGACHAT_AUTH_URL),
         gigaChatUrl: Setting("GigaChat", "ChatUrl", GIGACHAT_CHAT_URL),
+        gigaVerifySsl: Setting("GigaChat", "VerifySsl", "0") = "1",
         localUrl: Setting("Local", "Url", LOCAL_CHAT_URL),
         localModel: Setting("Local", "Model", "qwen2.5:7b"),
         localKey: Setting("Local", "ApiKey"),

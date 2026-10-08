@@ -2,13 +2,16 @@
 
 ; HTTP-запрос через WinHTTP. Тело отправляется и читается как UTF-8.
 ; headers — Map("Имя", "значение"). Возвращает {status, body}.
-HttpPost(url, body, headers, proxy := "") {
+; ignoreCertErrors — не проверять сертификат сервера (аналог verify=False).
+HttpPost(url, body, headers, proxy := "", ignoreCertErrors := false) {
     req := ComObject("WinHttp.WinHttpRequest.5.1")
     req.Open("POST", url, false)
     ; DNS, соединение, отправка, ожидание ответа (мс)
     req.SetTimeouts(15000, 15000, 30000, 120000)
     if proxy != ""
         req.SetProxy(2, proxy, "<local>")
+    if ignoreCertErrors
+        try req.Option[4] := 0x3300  ; SslErrorIgnoreFlags: неизвестный УЦ, имя, срок, назначение
     for name, value in headers
         req.SetRequestHeader(name, value)
     try {
@@ -16,9 +19,9 @@ HttpPost(url, body, headers, proxy := "") {
     } catch as e {
         host := RegExReplace(url, "^\w+://([^/]+).*$", "$1")
         msg := "Не удалось связаться с " host "."
-        if InStr(e.Message, "80072F8F") || InStr(e.Message, "80072F0D") || InStr(e.Message, "80072F06")
+        if InStr(e.Message, "80072F8F") || InStr(e.Message, "80072F0D") || InStr(e.Message, "80072F06") || InStr(e.Message, "80072F7D")
             msg .= "`nСервер использует сертификат, которому Windows не доверяет."
-                . "`nДля GigaChat установите сертификат «Russian Trusted Root CA» (см. README)."
+                . "`nДля GigaChat: VerifySsl=0 в settings.ini или сертификат «Russian Trusted Root CA» (см. README)."
         else if InStr(e.Message, "80072EE2")
             msg .= "`nПревышено время ожидания."
         else if InStr(e.Message, "80072EFD") && RegExMatch(host, "i)^(localhost|127\.0\.0\.1)(:|$)")
